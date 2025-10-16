@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>4-7-8 Breathing Cycle</title>
+    <style>
+        :root {
+            --bg-top: #0f1724;
+            --bg-bottom: #08121e;
+            --text: #e2e8f0;
+            --accent: #93c5fd;
+            --inhale: #60a5fa;
+            --hold: #fbbf24;
+            --exhale: #34d399;
+            --ring: #1f2a44;
+            --ring-active: #334155;
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            background: radial-gradient(1000px 700px at 50% 20%, var(--bg-top), var(--bg-bottom));
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            gap: 1rem;
+            padding: 1rem;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            color: var(--accent);
+            letter-spacing: .5px;
+        }
+
+        .controls {
+            display: flex;
+            gap: .5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        label {
+            font-size: .85rem;
+            opacity: .9
+        }
+
+        select, button {
+            padding: .55rem .9rem;
+            border: none;
+            border-radius: 10px;
+            background: #1f3b73;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform .05s ease, background .2s ease, opacity .2s ease;
+        }
+
+        select {
+            background: #0f274d
+        }
+
+        button:hover {
+            background: #25478b
+        }
+
+        button:active {
+            transform: translateY(1px)
+        }
+
+        button:disabled {
+            opacity: .6;
+            cursor: default
+        }
+
+        .stage {
+            position: relative;
+            width: min(78vmin, 420px);
+            aspect-ratio: 1;
+            display: grid;
+            place-items: center;
+        }
+
+        /* Starfield */
+        .stars, .stars::before, .stars::after {
+            position: absolute;
+            inset: -20%;
+            background: radial-gradient(2px 2px at 20% 30%, #ffffff30 60%, transparent 61%),
+            radial-gradient(1.5px 1.5px at 70% 60%, #ffffff22 60%, transparent 61%),
+            radial-gradient(1.2px 1.2px at 40% 80%, #ffffff18 60%, transparent 61%);
+            animation: drift 30s linear infinite;
+            filter: blur(.2px);
+            pointer-events: none;
+        }
+
+        .stars::before {
+            content: "";
+            opacity: .6;
+            transform: scale(1.2);
+            animation-duration: 45s;
+        }
+
+        .stars::after {
+            content: "";
+            opacity: .35;
+            transform: scale(1.4);
+            animation-duration: 60s;
+        }
+
+        @keyframes drift {
+            from {
+                transform: translateY(0)
+            }
+            to {
+                transform: translateY(20px)
+            }
+        }
+
+        /* Orb + ring */
+        .orb-wrap {
+            position: relative;
+            width: 70%;
+            aspect-ratio: 1;
+            display: grid;
+            place-items: center;
+        }
+
+        .ring {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            background: conic-gradient(from -90deg, var(--ring) 0deg, var(--ring) 360deg);
+            box-shadow: 0 0 0 2px #0b1423 inset, 0 0 40px #0a142466;
+            transition: background .3s ease;
+        }
+
+        .ring::after {
+            content: "";
+            position: absolute;
+            inset: 6%;
+            border-radius: 50%;
+            background: radial-gradient(160px 140px at 50% 35%, #0b1626, transparent 70%);
+            box-shadow: inset 0 0 24px #0a1222;
+        }
+
+        .orb {
+            width: 64%;
+            aspect-ratio: 1;
+            border-radius: 50%;
+            background: radial-gradient(120px 140px at 50% 30%, #ffffff14, transparent 65%),
+            radial-gradient(circle at 50% 70%, #0ea5e970, #155e7588 60%, transparent 70%);
+            box-shadow: inset 0 0 40px #94a3b833,
+            0 0 50px #38bdf833;
+            transform: scale(0.9);
+            transition: transform 0.8s ease, filter .6s ease, box-shadow .6s ease, background .4s ease;
+            filter: saturate(0.9);
+            will-change: transform;
+        }
+
+        .orb.inhale {
+            transform: scale(1.12);
+            filter: saturate(1.1);
+            box-shadow: inset 0 0 40px #93c5fd55, 0 0 65px #60a5fa66
+        }
+
+        .orb.hold {
+            transform: scale(1.16);
+            filter: saturate(1.05);
+            box-shadow: inset 0 0 45px #fde68a4d, 0 0 55px #fbbf2450
+        }
+
+        .orb.exhale {
+            transform: scale(0.84);
+            filter: saturate(0.95);
+            box-shadow: inset 0 0 35px #86efac44, 0 0 55px #34d39955
+        }
+
+        .readout {
+            position: absolute;
+            display: grid;
+            place-items: center;
+            gap: .35rem;
+            text-align: center;
+            user-select: none;
+        }
+
+        .phase {
+            font-size: 1.15rem;
+            color: #a5b4fc;
+            letter-spacing: .5px
+        }
+
+        .time {
+            font-size: 3rem;
+            font-weight: 800
+        }
+
+        .sub {
+            font-size: .85rem;
+            opacity: .8
+        }
+
+        .footer {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            opacity: .9;
+            font-size: .9rem;
+        }
+
+        /* Accessibility: reduced motion */
+        @media (prefers-reduced-motion: reduce) {
+            .stars, .stars::before, .stars::after {
+                animation: none
+            }
+
+            .orb {
+                transition: none
+            }
+
+            .orb.inhale, .orb.hold, .orb.exhale {
+                transform: none
+            }
+        }
+    </style>
+</head>
+<body>
+<h1>4-7-8 Breathing</h1>
+
+<div class="controls" role="group" aria-label="Session controls">
+    <label>
+        Cycles
+        <select id="cycles">
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+        </select>
+    </label>
+    <button id="startBtn">Start</button>
+    <button id="muteBtn" aria-pressed="true">Sound: On</button>
+</div>
+
+<div class="stage" aria-live="polite" aria-atomic="true">
+    <div class="stars"></div>
+    <div class="orb-wrap">
+        <div class="ring" id="ring"></div>
+        <div class="orb" id="orb" aria-hidden="true"></div>
+        <div class="readout">
+            <div class="phase" id="phase">Ready</div>
+            <div class="time" id="timer">0</div>
+            <div class="sub" id="hint">In through nose, out through mouth</div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    <div>Press Space to start/pause</div>
+    <div>Shift+S toggles sound</div>
+</div>
+
+<script>
+    (() => {
+        const startBtn = document.getElementById('startBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const cyclesSel = document.getElementById('cycles');
+        const phaseEl = document.getElementById('phase');
+        const timerEl = document.getElementById('timer');
+        const ringEl = document.getElementById('ring');
+        const orbEl = document.getElementById('orb');
+        const hintEl = document.getElementById('hint');
+
+        const phases = [
+            {
+                name: 'Inhale',
+                seconds: 4,
+                color: getComputedStyle(document.documentElement).getPropertyValue('--inhale').trim(),
+                hint: 'Breathe in gently through the nose'
+            },
+            {
+                name: 'Hold',
+                seconds: 7,
+                color: getComputedStyle(document.documentElement).getPropertyValue('--hold').trim(),
+                hint: 'Rest softly, shoulders relaxed'
+            },
+            {
+                name: 'Exhale',
+                seconds: 8,
+                color: getComputedStyle(document.documentElement).getPropertyValue('--exhale').trim(),
+                hint: 'Exhale like a whisper through mouth'
+            },
+        ];
+
+        let requested = false;
+        let running = false;
+        let cycleCount = 0;
+        let targetCycles = parseInt(cyclesSel.value, 10);
+        let currentPhase = -1;
+        let endAt = 0;
+        let rafId = null;
+        let intervalId = null;
+
+        // Web Audio (tone cues)
+        let audioCtx = null;
+        let soundOn = true;
+
+        function ensureAudio() {
+            if (!audioCtx) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                } catch (e) {
+                    soundOn = false;
+                    updateMuteBtn();
+                }
+            }
+        }
+
+        function beep({duration = 0.12, freq = 440, type = 'sine', gain = 0.03} = {}) {
+            if (!soundOn) return;
+            ensureAudio();
+            if (!audioCtx) return;
+            const t0 = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, t0);
+            g.gain.setValueAtTime(0, t0);
+            g.gain.linearRampToValueAtTime(gain, t0 + 0.01);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+            osc.connect(g).connect(audioCtx.destination);
+            osc.start(t0);
+            osc.stop(t0 + duration + 0.02);
+        }
+
+        function updateMuteBtn() {
+            muteBtn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+            muteBtn.setAttribute('aria-pressed', String(soundOn));
+        }
+
+        function setPhaseClass(name) {
+            orbEl.classList.remove('inhale', 'hold', 'exhale');
+            const key = name.toLowerCase();
+            if (key === 'inhale') orbEl.classList.add('inhale');
+            if (key === 'hold') orbEl.classList.add('hold');
+            if (key === 'exhale') orbEl.classList.add('exhale');
+        }
+
+        function setRingProgress(progress, color) {
+            // progress: 0..1
+            const deg = Math.max(0, Math.min(360, progress * 360));
+            ringEl.style.background = `conic-gradient(from -90deg, ${color} ${deg}deg, var(--ring) ${deg}deg 360deg)`;
+        }
+
+        function runPhase(i) {
+            if (i >= phases.length) {
+                cycleCount++;
+                if (cycleCount >= targetCycles) {
+                    phaseEl.textContent = 'Cycle complete ✓';
+                    timerEl.textContent = '0';
+                    hintEl.textContent = 'Well done. Notice how you feel.';
+                    running = false;
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Start again';
+                    setRingProgress(0, 'var(--ring-active)');
+                    orbEl.classList.remove('inhale', 'hold', 'exhale');
+                    beep({freq: 660, duration: 0.18, type: 'triangle', gain: 0.035});
+                    beep({freq: 880, duration: 0.18, type: 'triangle', gain: 0.035});
+                    return;
+                }
+                // short inter-cycle pause (1s)
+                phaseEl.textContent = `Cycle ${cycleCount}/${targetCycles}`;
+                timerEl.textContent = '1';
+                hintEl.textContent = 'Soft pause';
+                setRingProgress(0, 'var(--ring-active)');
+                intervalId = setTimeout(() => runPhase(0), 1000);
+                return;
+            }
+
+            currentPhase = i;
+            const p = phases[i];
+            let remaining = p.seconds;
+            const start = performance.now();
+            endAt = start + p.seconds * 1000;
+
+            phaseEl.textContent = p.name;
+            phaseEl.style.color = p.color;
+            timerEl.textContent = String(remaining);
+            hintEl.textContent = p.hint;
+            setPhaseClass(p.name);
+
+            // Sound cue per phase
+            if (p.name === 'Inhale') beep({freq: 392, type: 'sine', gain: 0.03});
+            if (p.name === 'Hold') beep({freq: 262, type: 'sine', gain: 0.025});
+            if (p.name === 'Exhale') beep({freq: 220, type: 'sine', gain: 0.03});
+
+            // Smooth ring progress via rAF, numeric timer via 1Hz tick
+            cancelAnimationFrame(rafId);
+
+            function frame(t) {
+                if (!running) return;
+                const progress = Math.min(1, (t - start) / (p.seconds * 1000));
+                setRingProgress(progress, p.color);
+                rafId = requestAnimationFrame(frame);
+            }
+
+            rafId = requestAnimationFrame(frame);
+
+            clearInterval(intervalId);
+            intervalId = setInterval(() => {
+                const msLeft = Math.max(0, endAt - performance.now());
+                const sLeft = Math.ceil(msLeft / 1000);
+                timerEl.textContent = String(sLeft);
+                if (msLeft <= 0) {
+                    clearInterval(intervalId);
+                    cancelAnimationFrame(rafId);
+                    runPhase(i + 1);
+                }
+            }, 100);
+
+        }
+
+        function startSession() {
+            if (running) return;
+            if (!requested) {
+                // some browsers require user gesture before audio
+                ensureAudio();
+                requested = true;
+            }
+            cycleCount = 0;
+            targetCycles = parseInt(cyclesSel.value, 10);
+            running = true;
+            startBtn.disabled = true;
+            startBtn.textContent = 'Running...';
+            runPhase(0);
+        }
+
+        function pauseSession() {
+            running = false;
+            startBtn.disabled = false;
+            startBtn.textContent = 'Resume';
+            phaseEl.textContent = 'Paused';
+            hintEl.textContent = 'Press Start or Space to continue';
+            cancelAnimationFrame(rafId);
+            clearInterval(intervalId);
+        }
+
+        function toggleSession() {
+            if (running) pauseSession();
+            else startSession();
+        }
+
+        // Events
+        startBtn.addEventListener('click', () => toggleSession());
+        muteBtn.addEventListener('click', () => {
+            soundOn = !soundOn;
+            updateMuteBtn();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                toggleSession();
+            }
+            if (e.shiftKey && (e.code === 'KeyS')) {
+                soundOn = !soundOn;
+                updateMuteBtn();
+            }
+        });
+
+        // Initialize UI
+        updateMuteBtn();
+        setRingProgress(0, 'var(--ring-active)');
+    })();
+</script>
+</body>
+</html>
