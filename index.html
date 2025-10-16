@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <meta name="viewport"
+          content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no"/>
     <title>4-7-8 Breathing Cycle</title>
     <style>
         :root {
@@ -19,6 +20,10 @@
 
         * {
             box-sizing: border-box
+        }
+
+        html, body {
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -40,6 +45,7 @@
             margin: 0;
             color: var(--accent);
             letter-spacing: .5px;
+            text-align: center;
         }
 
         .controls {
@@ -64,6 +70,7 @@
             font-weight: 600;
             cursor: pointer;
             transition: transform .05s ease, background .2s ease, opacity .2s ease;
+            touch-action: manipulation;
         }
 
         select {
@@ -81,6 +88,11 @@
         button:disabled {
             opacity: .6;
             cursor: default
+        }
+
+        /* Toggle button visual affordance when pressed */
+        button[aria-pressed="true"] {
+            background: #2a519e;
         }
 
         .stage {
@@ -216,6 +228,52 @@
             align-items: center;
             opacity: .9;
             font-size: .9rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            text-align: center;
+        }
+
+        /* Mobile/touch adjustments */
+        @media (pointer: coarse), (max-width: 600px) {
+            .controls {
+                gap: .75rem;
+            }
+
+            select, button {
+                padding: .8rem 1.1rem;
+                border-radius: 12px;
+                font-size: 1rem;
+            }
+
+            label {
+                font-size: 1rem;
+            }
+
+            .stage {
+                width: min(90vmin, 480px);
+            }
+
+            .time {
+                font-size: 3.25rem;
+            }
+
+            .phase {
+                font-size: 1.2rem;
+            }
+
+            .sub {
+                font-size: .95rem;
+            }
+
+            .footer {
+                font-size: 1rem;
+                gap: .6rem;
+            }
+
+            /* Ensure no accidental double-tap zoom on frequent taps */
+            button, .controls button, .controls select {
+                touch-action: manipulation;
+            }
         }
 
         /* Accessibility: reduced motion */
@@ -247,8 +305,10 @@
             <option value="6">6</option>
         </select>
     </label>
-    <button id="startBtn">Start</button>
-    <button id="muteBtn" aria-pressed="true">Sound: On</button>
+    <!-- Start acts as Start/Pause/Resume by changing its label; not a toggle button -->
+    <button id="startBtn" aria-label="Start breathing session">Start</button>
+    <!-- Single Sound button with aria-pressed for toggle semantics -->
+    <button id="soundBtn" aria-pressed="true" aria-label="Toggle sound">Sound: On</button>
 </div>
 
 <div class="stage" aria-live="polite" aria-atomic="true">
@@ -259,12 +319,12 @@
         <div class="readout">
             <div class="phase" id="phase">Ready</div>
             <div class="time" id="timer">0</div>
-            <div class="sub" id="hint">In through nose, out through mouth</div>
+            <div class="sub" id="hint">Tap Start to begin or pause</div>
         </div>
     </div>
 </div>
 
-<div class="footer">
+<div class="footer" id="footerHints">
     <div>Press Space to start/pause</div>
     <div>Shift+S toggles sound</div>
 </div>
@@ -272,13 +332,14 @@
 <script>
     (() => {
         const startBtn = document.getElementById('startBtn');
-        const muteBtn = document.getElementById('muteBtn');
+        const soundBtn = document.getElementById('soundBtn');
         const cyclesSel = document.getElementById('cycles');
         const phaseEl = document.getElementById('phase');
         const timerEl = document.getElementById('timer');
         const ringEl = document.getElementById('ring');
         const orbEl = document.getElementById('orb');
         const hintEl = document.getElementById('hint');
+        const footerHints = document.getElementById('footerHints');
 
         const phases = [
             {
@@ -320,7 +381,7 @@
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 } catch (e) {
                     soundOn = false;
-                    updateMuteBtn();
+                    updateSoundBtn();
                 }
             }
         }
@@ -342,9 +403,9 @@
             osc.stop(t0 + duration + 0.02);
         }
 
-        function updateMuteBtn() {
-            muteBtn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
-            muteBtn.setAttribute('aria-pressed', String(soundOn));
+        function updateSoundBtn() {
+            soundBtn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+            soundBtn.setAttribute('aria-pressed', String(soundOn));
         }
 
         function setPhaseClass(name) {
@@ -356,7 +417,6 @@
         }
 
         function setRingProgress(progress, color) {
-            // progress: 0..1
             const deg = Math.max(0, Math.min(360, progress * 360));
             ringEl.style.background = `conic-gradient(from -90deg, ${color} ${deg}deg, var(--ring) ${deg}deg 360deg)`;
         }
@@ -388,13 +448,11 @@
 
             currentPhase = i;
             const p = phases[i];
-            let remaining = p.seconds;
             const start = performance.now();
             endAt = start + p.seconds * 1000;
 
             phaseEl.textContent = p.name;
             phaseEl.style.color = p.color;
-            timerEl.textContent = String(remaining);
             hintEl.textContent = p.hint;
             setPhaseClass(p.name);
 
@@ -403,7 +461,6 @@
             if (p.name === 'Hold') beep({freq: 262, type: 'sine', gain: 0.025});
             if (p.name === 'Exhale') beep({freq: 220, type: 'sine', gain: 0.03});
 
-            // Smooth ring progress via rAF, numeric timer via 1Hz tick
             cancelAnimationFrame(rafId);
 
             function frame(t) {
@@ -426,22 +483,21 @@
                     runPhase(i + 1);
                 }
             }, 100);
-
         }
 
         function startSession() {
             if (running) return;
             if (!requested) {
-                // some browsers require user gesture before audio
-                ensureAudio();
+                ensureAudio(); // requires a user gesture in modern browsers
                 requested = true;
             }
             cycleCount = 0;
             targetCycles = parseInt(cyclesSel.value, 10);
             running = true;
-            startBtn.disabled = true;
-            startBtn.textContent = 'Running...';
+            startBtn.disabled = false;
+            startBtn.textContent = 'Pause';
             runPhase(0);
+            hintEl.textContent = 'Tap Pause to take a break';
         }
 
         function pauseSession() {
@@ -449,21 +505,63 @@
             startBtn.disabled = false;
             startBtn.textContent = 'Resume';
             phaseEl.textContent = 'Paused';
-            hintEl.textContent = 'Press Start or Space to continue';
+            hintEl.textContent = 'Tap Resume to continue';
             cancelAnimationFrame(rafId);
             clearInterval(intervalId);
         }
 
         function toggleSession() {
-            if (running) pauseSession();
-            else startSession();
+            if (!requested || (!running && phaseEl.textContent === 'Ready')) {
+                startSession();
+                return;
+            }
+            if (running) {
+                pauseSession();
+            } else {
+                // resume from current phase
+                running = true;
+                startBtn.textContent = 'Pause';
+                hintEl.textContent = 'Tap Pause to take a break';
+                const i = Math.max(0, currentPhase);
+                const remainingMs = Math.max(0, endAt - performance.now());
+                if (remainingMs > 0 && i >= 0) {
+                    const p = phases[i];
+                    const start = performance.now();
+                    const color = p.color;
+                    cancelAnimationFrame(rafId);
+
+                    function frame(t) {
+                        if (!running) return;
+                        const elapsed = t - start;
+                        const progress = Math.min(1, elapsed / remainingMs);
+                        setRingProgress(progress, color);
+                        rafId = requestAnimationFrame(frame);
+                    }
+
+                    rafId = requestAnimationFrame(frame);
+
+                    clearInterval(intervalId);
+                    intervalId = setInterval(() => {
+                        const msLeft = Math.max(0, endAt - performance.now());
+                        const sLeft = Math.ceil(msLeft / 1000);
+                        timerEl.textContent = String(sLeft);
+                        if (msLeft <= 0) {
+                            clearInterval(intervalId);
+                            cancelAnimationFrame(rafId);
+                            runPhase(i + 1);
+                        }
+                    }, 100);
+                } else {
+                    runPhase(i + 1);
+                }
+            }
         }
 
         // Events
         startBtn.addEventListener('click', () => toggleSession());
-        muteBtn.addEventListener('click', () => {
+        soundBtn.addEventListener('click', () => {
             soundOn = !soundOn;
-            updateMuteBtn();
+            updateSoundBtn();
         });
 
         document.addEventListener('keydown', (e) => {
@@ -473,13 +571,44 @@
             }
             if (e.shiftKey && (e.code === 'KeyS')) {
                 soundOn = !soundOn;
-                updateMuteBtn();
+                updateSoundBtn();
             }
         });
 
+        // Detect touch/coarse pointer to adapt hints
+        function isCoarse() {
+            return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+        }
+
+        function applyHints() {
+            if (isCoarse()) {
+                footerHints.innerHTML = `
+                <div>Tap Start to begin or pause</div>
+                <div>Use Sound to toggle audio</div>
+            `;
+                // Also reflect initial hint in readout for mobile
+                if (!running && (phaseEl.textContent === 'Ready' || phaseEl.textContent === 'Paused')) {
+                    hintEl.textContent = 'Tap Start to begin or pause';
+                }
+            } else {
+                footerHints.innerHTML = `
+                <div>Press Space to start/pause</div>
+                <div>Shift+S toggles sound</div>
+            `;
+                if (!running && (phaseEl.textContent === 'Ready' || phaseEl.textContent === 'Paused')) {
+                    hintEl.textContent = 'Press Space to start or pause';
+                }
+            }
+        }
+
         // Initialize UI
-        updateMuteBtn();
+        updateSoundBtn();
         setRingProgress(0, 'var(--ring-active)');
+        applyHints();
+
+        // Update if orientation or pointer capability changes
+        window.matchMedia('(pointer: coarse)').addEventListener?.('change', applyHints);
+        window.addEventListener('orientationchange', applyHints, {passive: true});
     })();
 </script>
 </body>
