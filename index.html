@@ -87,8 +87,8 @@
             position: absolute;
             inset: 0;
             background: radial-gradient(2px 2px at 20% 30%, #ffffff30 60%, transparent 61%),
-                        radial-gradient(1.5px 1.5px at 70% 60%, #ffffff22 60%, transparent 61%),
-                        radial-gradient(1.2px 1.2px at 40% 80%, #ffffff18 60%, transparent 61%);
+            radial-gradient(1.5px 1.5px at 70% 60%, #ffffff22 60%, transparent 61%),
+            radial-gradient(1.2px 1.2px at 40% 80%, #ffffff18 60%, transparent 61%);
             animation: drift 30s linear infinite;
             filter: blur(.2px);
             pointer-events: none;
@@ -130,9 +130,9 @@
             aspect-ratio: 1;
             border-radius: 50%;
             background: radial-gradient(120px 140px at 50% 30%, #ffffff14, transparent 65%),
-                        radial-gradient(circle at 50% 70%, #0ea5e970, #155e7588 60%, transparent 70%);
+            radial-gradient(circle at 50% 70%, #0ea5e970, #155e7588 60%, transparent 70%);
             box-shadow: inset 0 0 40px #94a3b833, 0 0 50px #38bdf833;
-            transform: scale(0.9);
+            transform: scale(0.8);
             transition: transform 0.8s ease, filter .6s ease, box-shadow .6s ease, background .4s ease;
             filter: saturate(0.9);
             will-change: transform;
@@ -221,224 +221,252 @@
         const phases = [
             { name: 'Inhale', seconds: 4, color: getComputedStyle(document.documentElement).getPropertyValue('--inhale').trim(), hint: 'Breathe in gently through the nose' },
             { name: 'Hold', seconds: 7, color: getComputedStyle(document.documentElement).getPropertyValue('--hold').trim(), hint: 'Rest softly, shoulders relaxed' },
-            { name: 'Exhale', seconds: 8, color: getComputedStyle(document.documentElement).getPropertyValue('--exhale').trim(), hint: 'Exhale like a whisper through mouth' },
+            { name: 'Exhale', seconds: 8, color: getComputedStyle(document.documentElement).getPropertyValue('--exhale').trim(), hint: 'Exhale slowly through the mouth' },
         ];
 
-        let requested = false, running = false, cycleCount = 0, targetCycles = parseInt(cyclesSel.value, 10);
-        let currentPhase = -1, endAt = 0, rafId = null, intervalId = null, remainingPhaseMs = 0, elapsedPhaseMs = 0;
         let audioCtx = null, soundOn = true;
+        let running = false, requested = false;
+        let currentPhase = -1, cycleCount = 0, targetCycles = parseInt(cyclesSel.value, 10);
+        let rafId = null, intervalId = null;
+        let startTime = 0, elapsedPhaseMs = 0;
 
+        // --- SOUND ----
         function ensureAudio() {
             if (!audioCtx) {
-                try { audioCtx = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){ soundOn=false; updateSoundBtn(); }
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { soundOn = false; updateSoundBtn(); }
             }
         }
 
-        function beep({duration=0.12,freq=440,type='sine',gain=0.03}={}) {
-            if(!soundOn) return; ensureAudio(); if(!audioCtx) return;
+        function beep({ duration = 0.12, freq = 440, type = 'sine', gain = 0.03 } = {}) {
+            if (!soundOn) return;
+            ensureAudio();
+            if (!audioCtx) return;
             const t0 = audioCtx.currentTime;
             const osc = audioCtx.createOscillator();
             const g = audioCtx.createGain();
-            osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, t0);
             g.gain.setValueAtTime(0, t0);
             g.gain.linearRampToValueAtTime(gain, t0 + 0.01);
             g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
             osc.connect(g).connect(audioCtx.destination);
-            osc.start(t0); osc.stop(t0 + duration + 0.02);
+            osc.start(t0);
+            osc.stop(t0 + duration + 0.02);
         }
 
-        function updateSoundBtn() { soundBtn.textContent = soundOn?'Sound: On':'Sound: Off'; soundBtn.setAttribute('aria-pressed',String(soundOn)); }
+        function updateSoundBtn() {
+            soundBtn.textContent = soundOn ? 'Sound: On' : 'Sound: Off';
+            soundBtn.setAttribute('aria-pressed', String(soundOn));
+        }
 
-        function setPhaseClass(name){ orbEl.classList.remove('inhale','hold','exhale'); orbEl.classList.add(name.toLowerCase()); }
+        // --- VISUALS ----
+        function setRingProgress(progress, color) {
+            ringEl.style.background = `conic-gradient(from -90deg, ${color} ${progress * 360}deg, var(--ring) ${progress * 360}deg 360deg)`;
+        }
 
-        function setRingProgress(progress,color){ ringEl.style.background = `conic-gradient(from -90deg, ${color} ${progress*360}deg, var(--ring) ${progress*360}deg 360deg)`; }
+        // Orb scaling constants
+        const scaleMin = 0.8;  // smallest (start of inhale / end of exhale)
+        const scaleMax = 1.15; // largest (during hold)
 
-        function runPhase(i){
-            if(i>=phases.length){
+        function setOrbScale(progress, phaseName) {
+            if (phaseName === 'Inhale') {
+                const scale = scaleMin + (scaleMax - scaleMin) * progress;
+                orbEl.style.transform = `scale(${scale})`;
+            } else if (phaseName === 'Exhale') {
+                const scale = scaleMax - (scaleMax - scaleMin) * progress;
+                orbEl.style.transform = `scale(${scale})`;
+            } else if (phaseName === 'Hold') {
+                orbEl.style.transform = `scale(${scaleMax})`;
+            }
+        }
+
+        // --- MAIN LOOP ----
+        function runPhase(i) {
+            if (i >= phases.length) {
                 cycleCount++;
-                if(cycleCount>=targetCycles){
-                    phaseEl.textContent='Cycle complete ✓';
-                    timerEl.textContent='0';
-                    hintEl.textContent='Tap the ring to start again';
-                    running=false;
-                    ringEl.setAttribute('aria-pressed','false');
-                    setRingProgress(0,'var(--ring-active)');
-                    orbEl.classList.remove('inhale','hold','exhale');
-                    beep({freq:660,duration:0.18,type:'triangle',gain:0.035});
-                    beep({freq:880,duration:0.18,type:'triangle',gain:0.035});
-                    remainingPhaseMs = 0;
+                if (cycleCount >= targetCycles) {
+                    finishSession();
                     return;
                 }
-                phaseEl.textContent=`Cycle ${cycleCount}/${targetCycles}`;
-                timerEl.textContent='1';
-                hintEl.textContent='Soft pause';
-                setRingProgress(0,'var(--ring-active)');
-                intervalId=setTimeout(()=>runPhase(0),1000);
+                setRingProgress(0, 'var(--ring-active)');
+                orbEl.style.transform = `scale(${scaleMin})`;
+                setTimeout(() => runPhase(0), 1000);
                 return;
             }
 
-            currentPhase=i;
-            const p=phases[i];
+            currentPhase = i;
+            const p = phases[i];
+            const duration = p.seconds * 1000;
             elapsedPhaseMs = 0;
-            const start=performance.now();
-            endAt=start+p.seconds*1000;
+            startTime = performance.now();
 
-            phaseEl.textContent=p.name;
-            phaseEl.style.color=p.color;
-            hintEl.textContent=p.hint;
-            setPhaseClass(p.name);
+            phaseEl.textContent = p.name;
+            phaseEl.style.color = p.color;
+            hintEl.textContent = p.hint;
 
-            if(p.name==='Inhale') beep({freq:392,type:'sine',gain:0.03});
-            if(p.name==='Hold') beep({freq:262,type:'sine',gain:0.025});
-            if(p.name==='Exhale') beep({freq:220,type:'sine',gain:0.03});
+            if (p.name === 'Inhale') beep({ freq: 392, gain: 0.03 });
+            if (p.name === 'Hold') beep({ freq: 262, gain: 0.025 });
+            if (p.name === 'Exhale') beep({ freq: 220, gain: 0.03 });
 
             cancelAnimationFrame(rafId);
-            function frame(t){
-                if(!running) return;
-                const progress=Math.min(1,(t-start)/(p.seconds*1000));
-                setRingProgress(progress,p.color);
-                rafId=requestAnimationFrame(frame);
-            }
-            rafId=requestAnimationFrame(frame);
-
             clearInterval(intervalId);
-            intervalId=setInterval(()=>{
-                const msLeft=Math.max(0,endAt-performance.now());
-                const sLeft=Math.ceil(msLeft/1000);
-                timerEl.textContent=String(sLeft);
-                if(msLeft<=0){
-                    clearInterval(intervalId);
-                    cancelAnimationFrame(rafId);
-                    runPhase(i+1);
+
+            function animate(now) {
+                if (!running) return;
+                const elapsed = now - startTime;
+                elapsedPhaseMs = elapsed;
+                const progress = Math.min(1, elapsed / duration);
+
+                // Outer ring progress
+                if (p.name === 'Inhale') {
+                    setRingProgress(progress, p.color);
+                } else if (p.name === 'Exhale') {
+                    setRingProgress(1 - progress, p.color);
+                } else {
+                    setRingProgress(1, p.color);
                 }
-            },100);
+
+                // Inner orb scale (smooth growth/hold/collapse)
+                setOrbScale(progress, p.name);
+
+                if (progress < 1) {
+                    rafId = requestAnimationFrame(animate);
+                } else {
+                    runPhase(i + 1);
+                }
+            }
+            rafId = requestAnimationFrame(animate);
+
+            intervalId = setInterval(() => {
+                const remaining = Math.max(0, duration - elapsedPhaseMs);
+                timerEl.textContent = String(Math.ceil(remaining / 1000));
+            }, 100);
         }
 
-        function startSession(){
-            if(running) return;
-            if(!requested){ ensureAudio(); requested=true; }
-            cycleCount=0; targetCycles=parseInt(cyclesSel.value,10);
-            running=true;
-            remainingPhaseMs=0;
-            ringEl.setAttribute('aria-pressed','true');
+        function finishSession() {
+            running = false;
+            ringEl.setAttribute('aria-pressed', 'false');
+            phaseEl.textContent = 'Cycle complete ✓';
+            timerEl.textContent = '0';
+            hintEl.textContent = 'Tap the ring to start again';
+            orbEl.style.transform = `scale(${scaleMin})`;
+            setRingProgress(0, 'var(--ring-active)');
+            beep({ freq: 660, duration: 0.18, type: 'triangle', gain: 0.035 });
+            beep({ freq: 880, duration: 0.18, type: 'triangle', gain: 0.035 });
+        }
+
+        // --- SESSION CONTROLS ----
+        function startSession() {
+            if (running) return;
+            if (!requested) { ensureAudio(); requested = true; }
+            targetCycles = parseInt(cyclesSel.value, 10);
+            cycleCount = 0;
+            running = true;
+            ringEl.setAttribute('aria-pressed', 'true');
             runPhase(0);
-            hintEl.textContent='Tap the ring to pause';
+            hintEl.textContent = 'Tap the ring to pause';
         }
 
-        function pauseSession(){
+        function pauseSession() {
+            if (!running) return;
             running = false;
             ringEl.setAttribute('aria-pressed', 'false');
             phaseEl.textContent = 'Paused';
             hintEl.textContent = 'Tap the ring to resume';
             cancelAnimationFrame(rafId);
             clearInterval(intervalId);
-
-            const phaseDuration = phases[currentPhase].seconds * 1000;
-            const msLeft = Math.max(0, endAt - performance.now());
-            remainingPhaseMs = msLeft;
-            elapsedPhaseMs = phaseDuration - msLeft;
         }
 
-        function toggleSession() {
-            // Start new session if not requested yet, or if ready / completed
-            if (!requested || (!running && (phaseEl.textContent === 'Ready' || phaseEl.textContent.includes('complete')))) {
-                // Reset session state
-                currentPhase = -1;
-                cycleCount = 0;
-                remainingPhaseMs = 0;
-                targetCycles = parseInt(cyclesSel.value, 10);
-                startSession();
-                return;
-            }
-
-            // Pause if currently running
-            if (running) {
-                pauseSession();
-                return;
-            }
-
-            // Resume
+        function resumeSession() {
             running = true;
             ringEl.setAttribute('aria-pressed', 'true');
-
-            const i = Math.max(0, currentPhase);
-            const p = phases[i];
-
-            // Update phase text immediately
-            phaseEl.textContent = p.name;
-            phaseEl.style.color = p.color;
-            setPhaseClass(p.name);
-            hintEl.textContent = p.hint;
-
-            const phaseDuration = p.seconds * 1000;
-            const start = performance.now() - elapsedPhaseMs;
-            const duration = phaseDuration;
+            const p = phases[currentPhase];
+            const duration = p.seconds * 1000;
+            startTime = performance.now() - elapsedPhaseMs;
 
             cancelAnimationFrame(rafId);
-            function frame(t) {
-                if (!running) return;
-                const elapsed = t - start;
-                const progress = Math.min(1, elapsed / duration);
-                setRingProgress(progress, p.color);
-                rafId = requestAnimationFrame(frame);
-            }
-            rafId = requestAnimationFrame(frame);
-
             clearInterval(intervalId);
-            intervalId = setInterval(() => {
-                const msLeft = Math.max(0, duration - (performance.now() - start));
-                const sLeft = Math.ceil(msLeft / 1000);
-                timerEl.textContent = String(sLeft);
-                if (msLeft <= 0) {
-                    clearInterval(intervalId);
-                    cancelAnimationFrame(rafId);
-                    remainingPhaseMs = 0;
-                    runPhase(i + 1);
+
+            function animate(now) {
+                if (!running) return;
+                const elapsed = now - startTime;
+                elapsedPhaseMs = elapsed;
+                const progress = Math.min(1, elapsed / duration);
+
+                if (p.name === 'Inhale') {
+                    setRingProgress(progress, p.color);
+                } else if (p.name === 'Exhale') {
+                    setRingProgress(1 - progress, p.color);
+                } else {
+                    setRingProgress(1, p.color);
                 }
+
+                setOrbScale(progress, p.name);
+
+                if (progress < 1) {
+                    rafId = requestAnimationFrame(animate);
+                } else {
+                    runPhase(currentPhase + 1);
+                }
+            }
+            rafId = requestAnimationFrame(animate);
+
+            intervalId = setInterval(() => {
+                const remaining = Math.max(0, duration - elapsedPhaseMs);
+                timerEl.textContent = String(Math.ceil(remaining / 1000));
             }, 100);
         }
 
-        // Hints
-        function isCoarse(){ return window.matchMedia('(pointer: coarse)').matches; }
-        function applyHints(){
-            if(isCoarse()){
-                footerHints.innerHTML='<div>Tap the ring to begin or pause</div><div>Use Sound to toggle audio</div>';
-                if(!running&&(phaseEl.textContent==='Ready'||phaseEl.textContent==='Paused')) hintEl.textContent='Tap the ring to begin or pause';
+        function toggleSession() {
+            if (!requested || (!running && (phaseEl.textContent === 'Ready' || phaseEl.textContent.includes('complete')))) {
+                startSession();
+                return;
+            }
+            if (running) {
+                pauseSession();
             } else {
-                footerHints.innerHTML='<div>Press Space to start/pause</div><div>Shift+S toggles sound</div>';
-                if(!running&&(phaseEl.textContent==='Ready'||phaseEl.textContent==='Paused')) hintEl.textContent='Press Space to start or pause';
+                resumeSession();
             }
         }
 
-        // Event listeners
-        ringEl.addEventListener('click',toggleSession);
-        soundBtn.addEventListener('click',()=>{ soundOn=!soundOn; updateSoundBtn(); });
-        document.addEventListener('keydown',e=>{
-            if(!isCoarse()){
-                if(e.code==='Space'){ e.preventDefault(); toggleSession(); }
-                if(e.shiftKey&&(e.code==='KeyS')){ soundOn=!soundOn; updateSoundBtn(); }
+        // --- HINTS & CONTROLS ----
+        function isCoarse() { return window.matchMedia('(pointer: coarse)').matches; }
+        function applyHints() {
+            if (isCoarse()) {
+                footerHints.innerHTML = '<div>Tap the ring to begin or pause</div><div>Use Sound to toggle audio</div>';
+            } else {
+                footerHints.innerHTML = '<div>Press Space to start/pause</div><div>Shift+S toggles sound</div>';
+            }
+        }
+
+        ringEl.addEventListener('click', toggleSession);
+        soundBtn.addEventListener('click', () => { soundOn = !soundOn; updateSoundBtn(); });
+        document.addEventListener('keydown', e => {
+            if (!isCoarse()) {
+                if (e.code === 'Space') { e.preventDefault(); toggleSession(); }
+                if (e.shiftKey && e.code === 'KeyS') { soundOn = !soundOn; updateSoundBtn(); }
             }
         });
 
         cyclesSel.addEventListener('change', () => {
+            cancelAnimationFrame(rafId);
+            clearInterval(intervalId);
             running = false;
             currentPhase = -1;
             cycleCount = 0;
-            remainingPhaseMs = 0;
-            cancelAnimationFrame(rafId);
-            clearInterval(intervalId);
+            elapsedPhaseMs = 0;
+            orbEl.style.transform = `scale(${scaleMin})`;
             setRingProgress(0, 'var(--ring-active)');
             phaseEl.textContent = 'Ready';
             timerEl.textContent = '0';
             hintEl.textContent = 'Tap the ring to begin';
             ringEl.setAttribute('aria-pressed', 'false');
-    });
+        });
 
         updateSoundBtn();
-        setRingProgress(0,'var(--ring-active)');
+        setRingProgress(0, 'var(--ring-active)');
+        orbEl.style.transform = `scale(${scaleMin})`;
         applyHints();
-        window.matchMedia('(pointer: coarse)').addEventListener?.('change',applyHints);
-        window.addEventListener('orientationchange',applyHints,{passive:true});
     })();
 </script>
 </body>
