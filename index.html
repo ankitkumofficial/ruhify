@@ -225,7 +225,7 @@
         ];
 
         let requested = false, running = false, cycleCount = 0, targetCycles = parseInt(cyclesSel.value, 10);
-        let currentPhase = -1, endAt = 0, rafId = null, intervalId = null, remainingPhaseMs = 0;
+        let currentPhase = -1, endAt = 0, rafId = null, intervalId = null, remainingPhaseMs = 0, elapsedPhaseMs = 0;
         let audioCtx = null, soundOn = true;
 
         function ensureAudio() {
@@ -279,6 +279,7 @@
 
             currentPhase=i;
             const p=phases[i];
+            elapsedPhaseMs = 0;
             const start=performance.now();
             endAt=start+p.seconds*1000;
 
@@ -325,13 +326,17 @@
         }
 
         function pauseSession(){
-            running=false;
-            ringEl.setAttribute('aria-pressed','false');
-            phaseEl.textContent='Paused';
-            hintEl.textContent='Tap the ring to resume';
+            running = false;
+            ringEl.setAttribute('aria-pressed', 'false');
+            phaseEl.textContent = 'Paused';
+            hintEl.textContent = 'Tap the ring to resume';
             cancelAnimationFrame(rafId);
             clearInterval(intervalId);
-            remainingPhaseMs=Math.max(0,endAt-performance.now());
+
+            const phaseDuration = phases[currentPhase].seconds * 1000;
+            const msLeft = Math.max(0, endAt - performance.now());
+            remainingPhaseMs = msLeft;
+            elapsedPhaseMs = phaseDuration - msLeft;
         }
 
         function toggleSession() {
@@ -365,8 +370,9 @@
             setPhaseClass(p.name);
             hintEl.textContent = p.hint;
 
-            const start = performance.now();
-            const duration = remainingPhaseMs || p.seconds * 1000;
+            const phaseDuration = p.seconds * 1000;
+            const start = performance.now() - elapsedPhaseMs;
+            const duration = phaseDuration;
 
             cancelAnimationFrame(rafId);
             function frame(t) {
