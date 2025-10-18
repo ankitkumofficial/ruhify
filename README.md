@@ -1,3 +1,3 @@
 # ruhify
 
-https://ankitkumofficial.github.io/ruhify
+🌐 Access the official running application at https://ankitkumofficial.github.io/ruhify
