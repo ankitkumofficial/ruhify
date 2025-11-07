@@ -174,8 +174,13 @@
     function resumeSession() {
         running = true;
         ringEl.setAttribute('aria-pressed', 'true');
-        const i = currentPhase;
+
         const p = phases[currentPhase];
+        phaseEl.textContent = p.name;
+        phaseEl.style.color = p.color;
+        hintEl.textContent = 'Tap the ring to pause';
+
+        const i = currentPhase;
         const duration = p.seconds * 1000;
         startTime = performance.now() - elapsedPhaseMs;
 
