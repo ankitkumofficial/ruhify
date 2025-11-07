@@ -106,7 +106,7 @@ button[aria-pressed="true"] { background: #2a519e; }
     border-radius: 50%;
     background: conic-gradient(from -90deg, var(--ring) 0deg, var(--ring-active) 360deg);
     box-shadow: 0 0 0 0.125rem #0b1423 inset, 0 0 2.5rem #0a142466;
-    transition: background 0.3s ease, transform 0.1s ease;
+    transition: background 0.25s ease-in-out;
     display: grid;
     place-items: center;
     cursor: pointer;
@@ -114,6 +114,19 @@ button[aria-pressed="true"] { background: #2a519e; }
 }
 
 .ring:active { transform: scale(0.95); }
+
+.ring::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--hold);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+
+.ring.hold::before { opacity: 1; }
 
 .ring::after {
     content: "";

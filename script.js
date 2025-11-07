@@ -20,10 +20,10 @@
     let rafId = null, intervalId = null;
     let startTime = 0, elapsedPhaseMs = 0;
 
-    // --- SOUND ----
     function ensureAudio() {
         if (!audioCtx) {
-            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { soundOn = false; updateSoundBtn(); }
+            try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+            catch { soundOn = false; updateSoundBtn(); }
         }
     }
 
@@ -49,31 +49,27 @@
         soundBtn.setAttribute('aria-pressed', String(soundOn));
     }
 
-    // --- VISUALS ----
-    function setRingProgress(progress, color) {
-        ringEl.style.background = `conic-gradient(from -90deg, ${color} ${progress * 360}deg, var(--ring) ${progress * 360}deg 360deg)`;
+    function setRingProgress(progress, color, phaseName = '') {
+        if (phaseName === 'Hold') {
+            ringEl.style.background = color;
+            return;
+        }
+        const angle = progress * 360;
+        ringEl.style.background = `conic-gradient(from -90deg, ${color} ${angle}deg, var(--ring) ${angle}deg 360deg)`;
     }
 
-    // Orb scaling constants
-    const scaleMin = 0.8;  // smallest (start of inhale / end of exhale)
-    const scaleMax = 1.15; // largest (during hold)
+    const scaleMin = 0.8;
+    const scaleMax = 1.15;
 
     function setOrbScale(progress, phaseName) {
         orbEl.style.transition = 'none';
-
         let scale;
-        if (phaseName === 'Inhale') {
-            scale = scaleMin + (scaleMax - scaleMin) * progress; // expand
-        } else if (phaseName === 'Exhale') {
-            scale = scaleMax - (scaleMax - scaleMin) * progress; // collapse
-        } else {
-            scale = scaleMax; // Hold stays fixed
-        }
-
+        if (phaseName === 'Inhale') scale = scaleMin + (scaleMax - scaleMin) * progress;
+        else if (phaseName === 'Exhale') scale = scaleMax - (scaleMax - scaleMin) * progress;
+        else scale = scaleMax;
         orbEl.style.transform = `scale(${scale})`;
     }
 
-    // --- MAIN LOOP ----
     function runPhase(i) {
         if (i >= phases.length) {
             cycleCount++;
@@ -97,6 +93,8 @@
         phaseEl.style.color = p.color;
         hintEl.textContent = p.hint;
 
+        highlightPhase(p.color);
+
         if (p.name === 'Inhale') beep({ freq: 392, gain: 0.03 });
         if (p.name === 'Hold') beep({ freq: 262, gain: 0.025 });
         if (p.name === 'Exhale') beep({ freq: 220, gain: 0.03 });
@@ -106,30 +104,32 @@
 
         function animate(now) {
             if (!running) return;
-
             const elapsed = now - startTime;
             elapsedPhaseMs = elapsed;
             const progress = Math.min(1, elapsed / duration);
 
             if (p.name === 'Inhale') {
-                setRingProgress(progress, p.color);
+                ringEl.classList.remove('hold');
+                setRingProgress(progress, p.color, 'Inhale');
                 setOrbScale(progress, 'Inhale');
             } else if (p.name === 'Hold') {
-                setRingProgress(1, p.color);
+                ringEl.classList.add('hold');
+                setRingProgress(1, p.color, 'Hold');
                 setOrbScale(1, 'Hold');
             } else if (p.name === 'Exhale') {
-                setRingProgress(1 - progress, p.color);
+                ringEl.classList.remove('hold');
+                setRingProgress(1 - progress, p.color, 'Exhale');
                 setOrbScale(progress, 'Exhale');
             }
 
-            if (progress < 1) {
-                rafId = requestAnimationFrame(animate);
-            } else {
+            if (progress < 1) rafId = requestAnimationFrame(animate);
+            else {
                 cancelAnimationFrame(rafId);
                 clearInterval(intervalId);
                 setTimeout(() => runPhase(i + 1), 50);
             }
         }
+
         rafId = requestAnimationFrame(animate);
 
         intervalId = setInterval(() => {
@@ -150,7 +150,6 @@
         beep({ freq: 880, duration: 0.18, type: 'triangle', gain: 0.035 });
     }
 
-    // --- SESSION CONTROLS ----
     function startSession() {
         if (running) return;
         if (!requested) { ensureAudio(); requested = true; }
@@ -175,6 +174,7 @@
     function resumeSession() {
         running = true;
         ringEl.setAttribute('aria-pressed', 'true');
+        const i = currentPhase;
         const p = phases[currentPhase];
         const duration = p.seconds * 1000;
         startTime = performance.now() - elapsedPhaseMs;
@@ -184,30 +184,32 @@
 
         function animate(now) {
             if (!running) return;
-
             const elapsed = now - startTime;
             elapsedPhaseMs = elapsed;
             const progress = Math.min(1, elapsed / duration);
 
             if (p.name === 'Inhale') {
-                setRingProgress(progress, p.color);
+                ringEl.classList.remove('hold');
+                setRingProgress(progress, p.color, 'Inhale');
                 setOrbScale(progress, 'Inhale');
             } else if (p.name === 'Hold') {
-                setRingProgress(1, p.color);
+                ringEl.classList.add('hold');
+                setRingProgress(1, p.color, 'Hold');
                 setOrbScale(1, 'Hold');
             } else if (p.name === 'Exhale') {
-                setRingProgress(1 - progress, p.color);
+                ringEl.classList.remove('hold');
+                setRingProgress(1 - progress, p.color, 'Exhale');
                 setOrbScale(progress, 'Exhale');
             }
 
-            if (progress < 1) {
-                rafId = requestAnimationFrame(animate);
-            } else {
+            if (progress < 1) rafId = requestAnimationFrame(animate);
+            else {
                 cancelAnimationFrame(rafId);
                 clearInterval(intervalId);
                 setTimeout(() => runPhase(i + 1), 50);
             }
         }
+
         rafId = requestAnimationFrame(animate);
 
         intervalId = setInterval(() => {
@@ -221,14 +223,20 @@
             startSession();
             return;
         }
-        if (running) {
-            pauseSession();
-        } else {
-            resumeSession();
-        }
+        if (running) pauseSession();
+        else resumeSession();
     }
 
-    // --- HINTS & CONTROLS ----
+    function highlightPhase(color) {
+        ringEl.style.transition = 'none';
+        ringEl.style.background = color;
+        void ringEl.offsetWidth;
+        ringEl.style.transition = 'background 0.25s ease-in-out';
+        requestAnimationFrame(() => {
+            ringEl.style.background = `conic-gradient(from -90deg, ${color} 0deg, var(--ring) 0deg 360deg)`;
+        });
+    }
+
     function isCoarse() { return window.matchMedia('(pointer: coarse)').matches; }
     function applyHints() {
         if (isCoarse()) {
